@@ -1,0 +1,21 @@
+# OCaml interface to SendGrid's HTTP/JSON interface
+
+OCAML_LIBS = $(OCAML_LIBS_sendgrid)
+
+FILES[] =
+  sendgrid_t
+  sendgrid_v
+  sendgrid_j
+  sendgrid
+# powder subcommand
+  test_sendgrid
+
+Atdgen(sendgrid, -j-std)
+OCamlLibrary(sendgrid, $(FILES))
+Meta(sendgrid)
+
+.DEFAULT: META sendgrid.cma sendgrid.cmxa
+
+.PHONY: clean
+clean:
+	rm -f *.o *.a *.cm* *~ *.annot *.run *.opt META $(ATDGEN_OUTFILES)

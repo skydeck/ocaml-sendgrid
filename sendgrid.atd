@@ -1,0 +1,122 @@
+(*
+  Specification is originally copy-pasted from:
+  http://docs.sendgrid.com/documentation/api/web-api
+
+  Note that the Sengrid API expects an application/x-www-form-urlencoded
+  request body (form data), not JSON. Most field values must be plain data
+  while some must be structured as JSON.
+
+  On the OCaml side, we convert a record into JSON and then
+  use a generic converter to convert JSON into form data.
+*)
+
+type utf8 = string <ocaml validator="Util_text.validate_utf8">
+
+type email = utf8 <ocaml validator="\
+  fun path s ->
+    if String.contains s '@' then None
+    else
+      let msg = Printf.sprintf \"Invalid email address %S\" s in
+      Some (Ag_util.Validation.error ~msg path)">
+
+type date = utf8 (* RFC 2822-compatible date *)
+type html = utf8
+
+(* See http://docs.sendgrid.com/documentation/api/smtp-api/
+   for all features. We only support a few. *)
+type x_smtpapi_header = {
+  ~category : utf8 list;
+    (* Up to 10 categories are supported. *)
+}
+    <ocaml validator="\
+      fun path {category} ->
+        let len = List.length category in
+        if len <= 10 then None
+        else
+          let msg = Printf.sprintf \"Too many categories (%i)\" len in
+          Some (Ag_util.Validation.error ~msg path)">
+
+type mail_send_request = {
+  api_user : string;
+    (* This is the same credential used for your SMTP settings,
+       and for logging into the website. *)
+
+  api_key : string;
+    (* This is the same password to authenticate over SMTP,
+       and for logging into the website. *)
+
+  ~to_ <json name="to"> : email;
+    (* Must be a valid email address. *)
+
+  ?toname : utf8 option;
+    (* Give a name to the recipient. *)
+
+  ?x_smtpapi <json name="x-smtpapi"> : x_smtpapi_header option;
+    (* Must be in valid JSON format.
+       Please review SMPTAPI to view documentation on what you can do
+       with the JSON headers. *)
+
+  subject : utf8;
+    (* The subject of your email *)
+
+  ?text : utf8 option;
+  ?html : html option;
+    (* At least one of text or html must be set.
+       The actual content of your email message.
+       It can be sent as either plain text or HTML for the user to display. *)
+
+  from : utf8;
+    (* Must be a valid email address from your domain.
+       This is where the email will appear to originate from for
+       your recipient. *)
+
+  ~bcc : email list;
+    (* Must be a valid email address.
+       This can also be passed in as an array of email addresses
+       for multiple recipients. *)
+
+  ?fromname : utf8 option;
+    (* This is name appended to the from email field.
+       IE - Your name or company name. *)
+
+  ?replyto : email option;
+    (* Must be a valid email address.
+       Append a reply-to field to your email message. *)
+
+  ?date : date option;
+    (* Must be a valid RFC 2822 formatted date.
+       Specify the date header of your email.
+       One example: "Thu, 21 Dec 2000 16:01:07 +0200".
+       PHP developers can use: date('r'); *)
+
+  ?files : string option; (* TODO - if ever needed *)
+    (* Must be less than 7MB.
+       Files to be attached. The file contents must be part of the
+       multipart HTTP POST.
+       Ex: files[file1.doc]=<file contents>&files[file2.pdf]=<file contents>
+       Example Code: http://docs.sendgrid.com/documentation/get-started/integrate/examples/php-example-using-the-web-api/ *)
+
+  ~headers : (utf8 * utf8) list <json repr="object">;
+    (* Must be in valid JSON format.
+       A collection of key/value pairs in JSON format.
+       Each key represents a header name and the value the header value.
+       Ex: {"X-Accept-Language": "en", "X-Mailer": "MyApp"}
+    *)
+}
+    <ocaml validator="
+      fun path x ->
+        if x.text <> None || x.html <> None then None
+        else
+          Some (Ag_util.Validation.error ~msg:\"Empty email body\" path)
+">
+
+type success_or_error = [ Success <json name="success">
+                        | Error <json name="error"> ]
+
+type response = {
+  message : success_or_error;
+    (* Whether the API call was sucessful *)
+
+  ~errors : utf8 list;
+    (* Error messages *)
+}
